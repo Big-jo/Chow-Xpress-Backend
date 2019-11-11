@@ -1,0 +1,6 @@
+{
+  "watch": ["**"],
+  "ext": "js",
+  "ignore": ["public"],
+  "exec": "ENV_FILE=development node -r ./env ./bin/www"
+}
