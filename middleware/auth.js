@@ -9,7 +9,7 @@ function Authenticate(req, res, next) {
     let result;
 
     if(authorizationHeader) {
-        const token = authorizationHeader.split();
+        const token = authorizationHeader.split(' ');
         try {
             const secret = process.env.JWT_SECRET;
             result = jwt.verify(token, secret);
