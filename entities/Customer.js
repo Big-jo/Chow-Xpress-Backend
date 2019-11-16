@@ -7,10 +7,6 @@ class Customer {
         this.socketID = '';
     }
 
-    set SOCKETID(id) {
-        this.socketID = id;
-    }
-
     /**
      *  Return an object that contains the customers' order and sum total of the order;
      *  @param order {object} - An object that contains the Items the user want's and the vendor to purchase from
