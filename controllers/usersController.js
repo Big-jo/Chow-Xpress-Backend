@@ -3,8 +3,10 @@ const bcrypt = require('bcrypt');
 const CreateToken = require("../lib/jsonWebToken");
 const Customer = require('../entities/Customer');
 const Courier = require('../entities/Courier');
-const logger = require("nodemon/lib/utils");
+// const logger = require("nodemon/lib/utils");
 const EventEmitter = require('events');
+const Vendor = require('../entities/Vendor');
+const VendorModel = require('../models/vendorModel');
 
 /**
  *
@@ -14,6 +16,7 @@ const EventEmitter = require('events');
 module.exports = User = (io) => {
     const loggedInCustomers = [];
     const availableCouriers = [];
+    const onlineVendors = [];
     const emitter = new EventEmitter();
 
     /**
@@ -26,7 +29,6 @@ module.exports = User = (io) => {
             if (User !== null) {
                 return 'Oops this User already exists'
             } else {
-                try {
                     const User = {
                         Name: req.body.Name,
                         Password: req.body.Password,
@@ -39,16 +41,10 @@ module.exports = User = (io) => {
                     const saltRounds = 10;
                     user.Password = await bcrypt.hash(User.Password, saltRounds);
                     user.save();
-                    console.log(user);
-                    const token = await CreateToken(user);
-                    return {token};
-                } catch (e) {
-                    throw e;
-                }
+                return await CreateToken(user);
             }
         } catch (e) {
-            console.log(e);
-            throw new Error(e);
+            throw new Error(e)
         }
     };
 
@@ -82,9 +78,26 @@ module.exports = User = (io) => {
     };
 
     this.registerCourier = async (req) => {
-        const courier = new Courier(req.body.name, req.body.phone_no);
-        availableCouriers.push(courier);
+        try {
+            const courier = new Courier(req.body.name, req.body.phone_no);
+            availableCouriers.push(courier);
+        } catch (e) {
+            throw new Error(e);
+        }
     };
+
+    this.vendorLogin = async function (req) {
+        //Hit DB and get vendor data
+        // TODO: Send vendorID after login or signup else there would be no id to use
+        try {
+            const foundVendor = await VendorModel.findOne({Name: req.body.name}).exec();
+            const vendor = new Vendor(foundVendor.Name, foundVendor.Location, foundVendor.PhoneNo);
+            onlineVendors.push(vendor);
+        } catch (e) {
+            throw new Error(e)
+        }
+    };
+
 
     /**
      * Creates an new order object and assigns it to a courier, then emits the courier and order
@@ -137,12 +150,11 @@ module.exports = User = (io) => {
      * @type {ParentNamespace|Buffer|SocketIO.Namespace|Chai.Assertion|Uint32Array|BigInt64Array|Int8Array|BigUint64Array|string[]|Int32Array|Uint8ClampedArray|Uint8Array|Int16Array|Float64Array|Float32Array|Uint16Array}
      ****************************************************************************************/
 
-    const customerSocket = io.of('/');
+    const customerSocket = io.of('/customer');
     customerSocket.on('connection', socket => {
-        // TODO: Emit an error if the user is not found in list of logged in, just as a precaution
         socket.on('connected', (data) => {
             let foundCustomer = findEntity('name', data.name, loggedInCustomers);
-            foundCustomer.socketID = socket.id;
+            foundCustomer ? foundCustomer.socketID = socket.id : socket.emit('associationError', 'This name could not be associated with a logged in customer')
         });
         socket.on('order', (data) => {
             try {
@@ -159,9 +171,9 @@ module.exports = User = (io) => {
         customerSocket.sockets[args.emittedData].emit('order_Assigned', {courierInfo: args.courier});
     });
     // Emit error to particular socket
-    emitter.on('error', args => {
-        customerSocket.sockets[args.socketID].emit('Assigned', {courierInfo: args.courier})
-    });
+    // emitter.on('error', args => {
+    //     // customerSocket.sockets[args.socketID].emit('error', {courierInfo: args.courier})
+    // });
 
     /*********************************************************************************************
      *                                      COURIER SOCKET CONNECTIONS
@@ -177,13 +189,36 @@ module.exports = User = (io) => {
         });
     });
 
-    //Notify a courier that they've been assigned an order and send order
+    // Notify a courier that they've been assigned an order and send order
+    // Also notify the vendor that an order has been placed and paid for
     emitter.on('assigned_An_Order', args => {
-        courierSocket.sockets[args.courierSID].emit('got_Assigned', args.order);
+        courierSocket.sockets[args.courierSID].emit('assigned_An_Order', args.order);
     });
 
+    /*********************************************************************************************
+     *                                      VENDOR SOCKET CONNECTIONS
+     * @type {ParentNamespace|Buffer|SocketIO.Namespace|Chai.Assertion|Uint32Array|BigInt64Array|Int8Array|BigUint64Array|string[]|Int32Array|Uint8ClampedArray|Uint8Array|Int16Array|Float64Array|Float32Array|Uint16Array}
+     **********************************************************************************************/
 
-    // TODO: Create a socket for a vendor, so they can receive a notification when an order has been placed
+
+    const vendorSocket = io.of('/vendor');
+    vendorSocket.on('connection', socket => {
+        socket.on('connected', args => {
+            const foundVendor = findEntity('name', args.name, onlineVendors);
+            foundVendor.socketID = socket.id;
+        });
+    });
+
+    /**
+     *  Emit an order object to the vendor to make them aware of a new order
+     */
+    emitter.on('assigned_An_Order', args => {
+        const vendor = findEntity('name', args.order.vendor, onlineVendors);
+        vendorSocket.sockets[vendor.socketID].emit('new_order', {
+            message: 'A New Order Has Been Made',
+            order: args.order,
+        });
+    });
 
     // Utility Functions
 
@@ -195,5 +230,6 @@ module.exports = User = (io) => {
 
     return this;
 //       TODO: Implement a logger
+//       TODO: Implement notification system
 };
 // exports.User = User;
