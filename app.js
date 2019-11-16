@@ -5,11 +5,11 @@ const logger = require('morgan');
 const mongoose = require('mongoose');
 const socketIO = require('socket.io');
 
-
 const app = express();
 
 // Setup socketIO
 const io = socketIO();
+// io.use(auth);
 app.io = io;
 
 // Routes
