@@ -14,7 +14,7 @@
     "express": "~4.16.1",
     "http-status-codes": "^1.4.0",
     "jsonwebtoken": "^8.5.1",
-    "karma": "^4.4.1",
+    "karma": "^6.3.14",
     "mongoose": "^5.7.9",
     "morgan": "~1.9.1",
     "nodeunit": "^0.11.3",
